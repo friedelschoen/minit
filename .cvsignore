@@ -6,3 +6,4 @@ hard-reboot
 write_proc
 killall5
 shutdown
+minit-update
