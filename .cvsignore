@@ -11,3 +11,5 @@ serdo
 ftrigger
 waitinterface
 waitport
+powersave
+governor
