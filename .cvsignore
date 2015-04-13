@@ -9,3 +9,5 @@ shutdown
 minit-update
 serdo
 ftrigger
+waitinterface
+waitport
