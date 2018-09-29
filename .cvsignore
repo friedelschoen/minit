@@ -13,3 +13,4 @@ waitinterface
 waitport
 powersave
 governor
+sepcode
