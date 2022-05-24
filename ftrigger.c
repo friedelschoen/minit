@@ -112,7 +112,10 @@ again:
       continue;
     case 1: break;
     };
-    read(in,buf,sizeof(buf));
+    if (read(in,buf,sizeof(buf)) < (ssize_t)sizeof(*ie)) {
+      buffer_putmflush(buffer_2,"error reading inotify notification: ",strerror(errno),"\n");
+      exit(111);
+    }
 
 #if 0
     buffer_puts(buffer_1,"got event for wd ");
@@ -212,8 +215,7 @@ goodevent:
 	if (v)
 	  buffer_putmflush(buffer_1,"file \"",root[i].filename,"\" changed, running command \"",root[i].command,"\"\n");
 	if (vfork()==0) {
-	  system(root[i].command);
-	  exit(0);
+	  exit(system(root[i].command));
 	}
       }
     }

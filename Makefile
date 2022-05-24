@@ -7,7 +7,7 @@ PIE=
 CFLAGS=-Wall -W -pipe -fomit-frame-pointer -Os $(PIE)
 CROSS=
 #CROSS=arm-linux-
-LDFLAGS=-s
+LDFLAGS=-s $(PIE)
 MANDIR=/usr/man
 
 path = $(subst :, ,$(PATH))
@@ -50,7 +50,7 @@ endif
 minit: minit.o split.o openreadclose.o opendevconsole.o
 msvc: msvc.o
 ftrigger: ftrigger.o
-minit-update: minit-update.o split.o openreadclose.o
+minit-update: minit-update.o
 serdo: serdo.o
 waitinterface: waitinterface.o
 waitport: waitport.o

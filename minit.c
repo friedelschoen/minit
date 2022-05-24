@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <alloca.h>
 #include <sys/reboot.h>
+#include <write12.h>
 
 #include <libowfat/fmt.h>
 #include <libowfat/str.h>
@@ -80,8 +81,8 @@ static int doupdate;
 
 static int i_am_init;
 
-extern int openreadclose(char *fn, char **buf, unsigned long *len);
-extern char **split(char *buf,int c,int *len,int plus,int ofs);
+extern int openreadclose(char *fn, char **buf, size_t *len);
+extern char **split(char *buf,int c,size_t* len,size_t plus,size_t ofs);
 
 extern char **environ;
 
@@ -223,10 +224,10 @@ pid_t forkandexec(int pause,int service) {
   int count=0;
   pid_t p;
   int fd;
-  unsigned long len;
+  size_t len;
   int islink;
   char *s=0;
-  int argc;
+  size_t argc;
   char *argv0=0;
 again:
   switch (p=fork()) {
@@ -239,10 +240,26 @@ again:
 
     if (i_am_init) {
       ioctl(0, TIOCNOTTY, 0);
-      setsid();
+      if (setsid() == -1) {
+	__write2("setsid failed unexpectedly.\n");
+	// This should never fail. init is run as root.
+	// If it does fail, don't exit for fear of bricking the system
+      }
       opendevconsole();
 /*      ioctl(0, TIOCSCTTY, 1); */
-      tcsetpgrp(0, getpgrp());
+      int r = tcsetpgrp(0, getpgrp());
+      if (r == -1 && errno!=ENOTTY) {	// will get this error for log services
+	__write2("tcsetpgrp failed unexpectedly: ");
+	switch (errno) {
+	case EBADF: __write2("EBADF\n"); break;
+	case EINVAL: __write2("EINVAL\n"); break;
+//	case ENOTTY: __write2("ENOTTY\n"); break;
+	case EPERM: __write2("EPERM\n"); break;
+	default: __write2("unhandled\n");
+	}
+	// This should never fail. init is run as root.
+	// If it does fail, don't exit for fear of bricking the system
+      }
     }
 
     if (pause) {
@@ -252,12 +269,19 @@ again:
       nanosleep(&req,0);
     }
     if ((fd=open("in",O_RDONLY))!=-1) {
-      dup2(fd,0);
+      if (dup2(fd,0) != 0) {
+	__write2("dup2 failed unexpectedly.\n");
+	// This should never fail. init is run as root.
+	// If it does fail, don't exit for fear of bricking the system
+      }
       fcntl(0,F_SETFD,0);
     }
     if ((fd=open("out",O_WRONLY))!=-1) {
-      dup2(fd,1);
-      dup2(fd,2);
+      if (dup2(fd,1) != 1 || dup2(fd,2) != 2) {
+	__write2("dup2 failed unexpectedly.\n");
+	// This should never fail. init is run as root.
+	// If it does fail, don't exit for fear of bricking the system
+      }
       fcntl(1,F_SETFD,0);
       fcntl(2,F_SETFD,0);
     }
@@ -271,7 +295,8 @@ again:
     }
     if (!openreadclose("params",&s,&len)) {
       argv=split(s,'\n',&argc,2,1);
-      if (argv[argc-1]) argv[argc-1]=0; else argv[argc]=0;
+      if (argc && argv[argc-1][0]==0) --argc;	// if params ended on newline, don't pass empty last arg
+      argv[argc]=0;
     } else {
       argv=(char**)alloca(2*sizeof(char*));
       argv[1]=0;
@@ -314,12 +339,19 @@ again:
 	argv0=c;
     }
     if (root[service].__stdin != 0) {
-      dup2(root[service].__stdin,0);
+      if (dup2(root[service].__stdin,0) != 0) {
+	__write2("dup2 failed unexpectedly.\n");
+	// This should never fail. init is run as root.
+	// If it does fail, don't exit for fear of bricking the system
+      }
       fcntl(0,F_SETFD,0);
     }
     if (root[service].__stdout != 1) {
-      dup2(root[service].__stdout,1);
-      dup2(root[service].__stdout,2);
+      if (dup2(root[service].__stdout,1) != 1 || dup2(root[service].__stdout,2) != 2) {
+	__write2("dup2 failed unexpectedly.\n");
+	// This should never fail. init is run as root.
+	// If it does fail, don't exit for fear of bricking the system
+      }
       fcntl(1,F_SETFD,0);
       fcntl(2,F_SETFD,0);
     }
@@ -380,7 +412,7 @@ int startservice(int service,int pause,int father) {
     // Need to free(s) independent of openreadclose return value
     if (!openreadclose("depends",&s,&len)) {
       char **deps=0;
-      int depc,i;
+      size_t depc,i;
       deps=split(s,'\n',&depc,0,0);
       for (i=0; i<depc; i++) {
 	int Service,blacklisted,j;
@@ -605,7 +637,10 @@ error:
 	    write(outfd,"1",1);
 	    if (1==poll(&pfd,nfds,5000)) {
 	      struct process tmp;
-	      read(infd,&tmp,sizeof tmp);
+	      if (read(infd,&tmp,sizeof tmp) != sizeof(tmp)) {
+		__write2("update failed, struct size mismatch.\n");
+		goto ok;
+	      }
 	      tmp.name=strdup(buf+1);
 	      addprocess(&tmp);
 	    }

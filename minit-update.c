@@ -25,9 +25,6 @@ static char buf[BUFLEN+1];
 static unsigned int verbose;
 static int do_update;
 
-int openreadclose(char *fn, char **buf, unsigned long *len);
-char **split(char *buf,int c,int *len,int plus,int ofs);
-
 void feed_struct_to_minit(struct process *data);
 
 ssize_t read_outfd(void *buf, size_t count);

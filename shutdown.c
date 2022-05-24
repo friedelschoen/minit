@@ -48,8 +48,8 @@ static inline int __write2(const char*s) { return write(2,s,str_len(s)); }
 extern void opendevconsole();
 
 extern char **environ;
-extern int openreadclose(char *fn, char **buf, unsigned long *len);
-extern char **split(char *buf,int c,int *len,int plus,int ofs);
+extern int openreadclose(char *fn, char **buf, size_t *len);
+extern char **split(char *buf,int c,size_t* len,size_t plus,size_t ofs);
 extern char *optarg;
 
 void wall(char *buf) {
@@ -93,7 +93,7 @@ int minit_serviceDown(char *service) {
   
   if (!openreadclose("depends", &s, &len)) {
     char **deps;
-    int depc, i;
+    size_t depc, i;
     deps=split(s, '\n', &depc, 0, 0);
     for (i=0; i<depc; i++) {
       if (deps[i][0] == '#') continue;
@@ -118,7 +118,8 @@ int minit_serviceDown(char *service) {
     strncpy(buf+1, service, 1400);
     buf[1400]=0;
     write(infd, buf, str_len(buf));
-    read(outfd, buf, 1500);
+    if (read(outfd, buf, 1500) < 1)
+      __write2("\t(status read failed)");
     i=kill(pid, SIGTERM);
     if (i == 0) __write2("\t\tdone\n");
     else __write2("\t\tfailed\n");
@@ -168,7 +169,10 @@ int main(int argc, char *const argv[]) {
   int cfg_sulogin = 0;
 
   #ifdef ALLOW_SUID
-  setuid(geteuid());
+  if (setuid(geteuid()) == -1) {
+    __write2("setuid(geteuid()) failed.\n");
+    return 111;
+  }
   #endif
   if (getuid() != 0) {
 	  __write2("you are not root, go away!\n");
