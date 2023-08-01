@@ -4,11 +4,14 @@
 #include <ctype.h>
 #include <sys/wait.h>
 #include <sys/resource.h>
+#include <string.h>
 
 #include <libowfat/str.h>
 #include <libowfat/byte.h>
 #include <libowfat/scan.h>
 #include <libowfat/errmsg.h>
+
+extern char** environ;
 
 #define MAXENV 256
 char* envp[MAXENV+2];
@@ -47,6 +50,9 @@ failornot:
   } else if (str_equal(argv[0],"export")) {
     for (i=1; argv[i]; ++i) envset(argv[i]);
     return 0;
+  } else if (str_equal(argv[0],"exec")) {
+    ++argv;
+    last=1;
   } else if (str_equal(argv[0],"ulimit")) {
     struct rlimit rl;
     for (i=1; argv[i] && argv[i+1]; i+=2) {
@@ -146,7 +152,7 @@ int run(char* s,int last) {
   return spawn(argv,last);
 }
 
-int execute(char* s) {
+int execute(char* s,int dontexeclast) {
   char* start;
   int r;
   r=0;
@@ -178,6 +184,7 @@ int execute(char* s) {
       last=(*tmp==0);
     } else
       last=1;
+    if (dontexeclast) last=0;
     r=run(start,last);
     if (r!=0 && !continueonerror)
       break;
@@ -185,7 +192,7 @@ int execute(char* s) {
   return r;
 }
 
-int batch(char* s) {
+int batch(char* s,int dontexeclast) {
   struct stat ss;
   int fd=open(s,O_RDONLY);
   char* map;
@@ -197,12 +204,14 @@ int batch(char* s) {
   map[ss.st_size]=0;
   close(fd);
 
-  return execute(map);
+  return execute(map,dontexeclast);
 }
 
 int main(int argc,char* argv[],char* env[]) {
   static char* fakeargv[]={0,"script",0};
   int r;
+  int failing=0;
+  int havefail=!access("fail",O_RDONLY);
   (void)argc;
   if (argc<2) {
     if (!access("script",O_RDONLY))
@@ -218,8 +227,15 @@ int main(int argc,char* argv[],char* env[]) {
     ++argv;
   }
   while (*++argv) {
-    if ((r=batch(*argv)))
+    if ((r=batch(*argv,!!argv[1] || (havefail && !failing)))) {
+      if (!failing && havefail) {
+	fakeargv[1]="fail";
+	argv=fakeargv;
+	failing=1;
+	continue;
+      }
       return r;
+    }
   }
   return 0;
 }
